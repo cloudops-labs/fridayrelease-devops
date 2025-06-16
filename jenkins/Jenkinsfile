@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+
+    environment {
+        EC2_HOST = 'ec2-user@YOUR_EC2_PUBLIC_IP'
+        SSH_KEY_ID = 'ec2-ssh-key'  // ID of your private key credential
+        APP_DIR = '/home/ec2-user/fridayrelease'
+        IMAGE_NAME = 'fridayrelease:latest'
+    }
+
+    stages {
+        stage('Deploy to EC2') {
+            steps {
+                sshagent (credentials: [SSH_KEY_ID]) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no $EC2_HOST '
+                      # Clone or pull latest
+                      if [ ! -d "$APP_DIR" ]; then
+                        git clone https://github.com/YOUR_ORG_NAME/fridayrelease-devops.git $APP_DIR
+                      else
+                        cd $APP_DIR && git pull
+                      fi
+
+                      # Build Docker image
+                      cd $APP_DIR/docker
+                      docker build -t $IMAGE_NAME .
+
+                      # Stop and remove old container
+                      docker rm -f fridayrelease || true
+
+                      # Run container
+                      docker run -d --name fridayrelease -p 80:80 $IMAGE_NAME
+                    '
+                    """
+                }
+            }
+        }
+    }
+}
